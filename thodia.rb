@@ -253,7 +253,5 @@ p page.body
 # Have a look at 'page': note the 'onSubmit' JavaScript function that is called when 
 # you click on the 'next' link. We'll mimic this in the function above.
 
-# create places table first
-#ScraperWiki.sqliteexecute("create table Places(Name, Address)")
 # start scraping
 scrape_and_look_for_next_link(page, starting_url, get_last_position <= 1 ? 1 : get_last_position - 1)
