@@ -1,7 +1,7 @@
 scraper_test
 ============
 
-scraper using mechanize and nokogiri
+scraper to scrape ASP NET pages using mechanize and nokogiri
 
 TODO list:
 - Add file lock (flock) to prevent to processes writing data on the same file at the same time. I had 9 processes parsing the site and I have no conflict problem.
