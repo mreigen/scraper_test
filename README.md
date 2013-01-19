@@ -4,7 +4,7 @@ scraper_test
 Parallel processing scraper to scrape ASP NET pages using mechanize and nokogiri
 
 TODO list:
-- Add file lock (flock) to prevent to processes writing data on the same file at the same time. I had 9 processes parsing the site and I have no conflict problem.
+- Add file lock (flock) to prevent to processes writing data on the same file at the same time. I had 16 processes parsing the site the whole night last night and I had no conflict problem.
 - Right now the counter increment only 1 for each iteration, we should make this 10 or a larger number so that the chance of conflict is smaller.
 - Add specs
 - This is important: Add another counter for interrupted scrapes, we can save this in another counter file or in the same "current_positions.json". The purpose of this is to scrape the pages that were interrupted in the middle next time we run a process. This file may contain an array of "bad" pages:
