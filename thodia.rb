@@ -3,16 +3,17 @@
 # START HERE: Tutorial for scraping ASP.NET pages (HTML pages that end .aspx), using the
 # very powerful Mechanize library. In general, when you follow a 'next' link on 
 # .aspx pages, you're actually submitting a form.
-# This tutorial demonstrates scraping a particularly tricky example. 
+# This demonstrates scraping a particularly tricky example. 
 ###############################################################################
 require 'mechanize'
 require 'securerandom'
-require 'json'
 
 #http://thodia.vn/websites/SearchResult.aspx?loNameID=1&lo=hcm
 BASE_URL = 'http://thodia.vn/websites/'
+SEARCH_URL = 'SearchResult.aspx?loNameID=1&lo=hcm'
+FAKE_USER_AGENT = 'Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.1) Gecko/2008071615 Fedora/3.0.1-1.fc9 Firefox/3.0.1'
 
-# scrape_table function: gets passed an individual page to scrape (not important for tutorial)
+# scrape_table function: gets passed an individual page to scrape
 def scrape_table(page_body)
   data_table = Nokogiri::HTML(page_body).css('table div.ItemResult').collect.with_index do |row, index|
     place_rec = {}
@@ -33,8 +34,6 @@ def scrape_table(page_body)
     address.gsub!("Địa chỉ: ", "")
 
     # see if the place has already been saved, if so, move on to the next
-    #saved_places = ScraperWiki.select("name, address from Places")
-    #place_already_saved = saved_places.any?  {|h| h["Name"] == title_links[0].inner_text && h["Address"] == address}
     place_already_saved = rec_exists?("places", ["name", "address"], {"name" => title_links[0].inner_text, "address" => address})
     p place_already_saved
     next if place_already_saved
@@ -48,7 +47,6 @@ def scrape_table(page_body)
 
       # save the main cat info for this row
       write("main_cats", ["name"], main_cat_rec.to_s + ",")
-      #ScraperWiki.save_sqlite(["MainCat"], main_cat_rec, "MainCats")
     end
     # sub cat info
     (2..title_links.count).each do |i|
@@ -66,14 +64,12 @@ def scrape_table(page_body)
         sub_cat_rec['id'] = sub_cat_id
         sub_cat_rec['main_cat_id'] = main_cat_id
         write("sub_cats", ["id", "main_cat_id"], sub_cat_rec.to_s + ",")
-        #ScraperWiki.save_sqlite(["SubCat", "MainCatId"], sub_cat_rec, "SubCats")
 
         # add a new record to place - cat - relation table
         place_cat_rel_rec["place_id"] = place_id
         place_cat_rel_rec["main_cat_id"] = main_cat_id
         place_cat_rel_rec["sub_cat_id"] = sub_cat_id
         write("place_cat_rels", ["place_id", "sub_cat_id", "main_cat_id"], place_cat_rel_rec.to_s + ",")
-        #ScraperWiki.save_sqlite(["PlaceId", "SubCatId", "MainCatId"], place_cat_rel_rec, "PlaceCatRelation")
       end
     end
     # place's info
@@ -114,7 +110,6 @@ def scrape_table(page_body)
       place_rec["tag_list"] = tag_list
       
       write("places", ["id", "name"], place_rec.to_s + ",")
-      #ScraperWiki.save_sqlite(["PlaceId", "Name"], place_rec, "Places")
     end
   end
 end
@@ -129,7 +124,7 @@ def scrape_and_look_for_next_link(page, request_url, next_page_num)
   if link
     got_page = @br.get request_url
     view_state = got_page.forms[0].field_with(:name => "__VIEWSTATE").value
-    #p view_state
+    
     page.form_with(:id => 'aspnetForm') do |f|
       f['__EVENTTARGET'] = 'ctl00$ContentPlaceHolder1$ucPaging$lkbNext'
       f['__EVENTARGUMENT'] = ''
@@ -138,6 +133,10 @@ def scrape_and_look_for_next_link(page, request_url, next_page_num)
       f['viet_method'] = 'on'
       f['ctl00$Header$ucSearch$txtSearch'] = 'Tìm địa điểm, thông tin khuyến mãi, hàng giảm giá...'
       f['ctl00$ContentPlaceHolder1$hdfPage'] = next_page_num
+      # I learned that I don't need to include some of the above but the coder of the site I am scraping
+      # ask for stuff that he doesn't need when submitting the form,
+      # it will return an empty page if not most of them are submitted
+      # so I just leave them here
       f['ctl00$ContentPlaceHolder1$hdfKey'] = ''
       f['ctl00$ContentPlaceHolder1$hdfKey1'] = ''
       f['ctl00$ContentPlaceHolder1$hdfLocation'] = -1
@@ -156,6 +155,8 @@ def scrape_and_look_for_next_link(page, request_url, next_page_num)
   end
 end
 
+# writes data to a file
+# checks in there are existing record based on the unique_keys
 def write(file_name, unique_keys, data, options = {})
   mode = (!options.empty? && options[:overwrite]) ? "w" : "a"
   open(file_name + ".json", mode) do |f|
@@ -165,6 +166,7 @@ def write(file_name, unique_keys, data, options = {})
   end
 end
 
+# checks in there are existing record based on the unique_keys
 def rec_exists?(file_name, unique_keys, data)
   json = File.read(file_name + ".json")
   json = json.split(",\n")
@@ -187,6 +189,8 @@ def rec_exists?(file_name, unique_keys, data)
   false
 end
 
+# adds the current position (pos) to the current_position list
+# returns nil if already saved
 def add_position(pos)
   return nil if position_already_saved? pos
   positions = read_positions
@@ -219,6 +223,15 @@ def read_positions
   positions.sort!
 end
 
+# this will return an array of the missing gap positions
+# for example I have in the location file
+# 1
+# 2
+# 6
+# 7
+# => [3, 4, 5]
+# this is so that parallel processes can find the last position
+# and work on the ones that haven't been scraped
 def get_gaps (array)
   return [] if array.empty?
   (array.first .. array.last).to_a - array
@@ -229,13 +242,10 @@ end
 # We need to set the user-agent header so the page thinks we're a browser, 
 # as otherwise it won't show all the fields we need
 # ---------------------------------------------------------------------------
-
-
-
-starting_url = BASE_URL + 'SearchResult.aspx?loNameID=1&lo=hcm'
+starting_url = BASE_URL + SEARCH_URL
 @br = Mechanize.new
 @br.keep_alive = false
-@br.user_agent = 'Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.1) Gecko/2008071615 Fedora/3.0.1-1.fc9 Firefox/3.0.1'
+@br.user_agent = FAKE_USER_AGENT
 
 page = @br.get(starting_url)
 p page.body
