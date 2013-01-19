@@ -121,7 +121,10 @@ end
 
 # Scrape page, look for 'next' link: if found, submit the page form
 def scrape_and_look_for_next_link(page, request_url, next_page_num)
-  write("current_position", [], next_page_num, {:overwrite => true})
+  while add_position(next_page_num).nil? do
+    next_page_num += 1
+  end
+  
   link = page.link_with(:text => 'Tiếp')
   if link
     got_page = @br.get request_url
@@ -184,9 +187,41 @@ def rec_exists?(file_name, unique_keys, data)
   false
 end
 
+def add_position(pos)
+  return nil if position_already_saved? pos
+  positions = read_positions
+  positions << pos.to_i
+  p positions
+  positions.sort!
+  positions.join("\n")
+  open("current_position.json", "w") do |f|
+    f.puts positions
+  end
+  true
+end
+
+def position_already_saved?(pos)
+  read_positions.include?(pos)
+end
+
 def get_last_position
-  last_position = File.read("current_position.json")
-  last_position ? last_position.to_i : 0
+  gaps = get_gaps(read_positions)
+  gaps.first.to_i unless gaps.empty?
+  read_positions.last.to_i + 1 unless read_positions.empty?
+  1
+end
+
+def read_positions
+  positions = File.read("current_position.json")
+  return [] if positions.empty?
+  positions = positions.split("\n") # build an array of positions
+  positions = positions.collect {|p| p.to_i}
+  positions.sort!
+end
+
+def get_gaps (array)
+  return [] if array.empty?
+  (array.first .. array.last).to_a - array
 end
 
 # ---------------------------------------------------------------------------
@@ -211,4 +246,4 @@ p page.body
 # create places table first
 #ScraperWiki.sqliteexecute("create table Places(Name, Address)")
 # start scraping
-scrape_and_look_for_next_link(page, starting_url, get_last_position - 1)
+scrape_and_look_for_next_link(page, starting_url, get_last_position <= 1 ? 1 : get_last_position - 1)
